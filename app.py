@@ -6,7 +6,7 @@ import sqlite3
 from sqlite3 import Error
 import json
 app = Flask(__name__)
-
+# TO UTILIZE THIS PROJECT, IN THE TERMINAL TYPE 'flask run --host=0.0.0.0'
 def create_connection(db_file):
     conn = None
     try:
@@ -87,7 +87,7 @@ def addData():
         return response
 
 
-aaa
+
 database = r"C:\sqlite\db\tempsensor.db"
 connection = create_connection(r"C:\sqlite\db\tempsensor.db")
 
