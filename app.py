@@ -5,7 +5,10 @@ from flask import Flask, render_template, request, jsonify
 import sqlite3
 from sqlite3 import Error
 import json
+
 app = Flask(__name__)
+
+
 # TO UTILIZE THIS PROJECT, IN THE TERMINAL TYPE 'flask run --host=0.0.0.0'
 def create_connection(db_file):
     conn = None
@@ -17,12 +20,14 @@ def create_connection(db_file):
 
     return conn
 
+
 def create_table(conn, create_table_sql):
     try:
         c = conn.cursor()
         c.execute(create_table_sql)
     except Error as e:
         print(e)
+
 
 def create_entry(conn, project):
     sql = ''' INSERT INTO data_entry(temp,humidity,timestamp)
@@ -31,6 +36,7 @@ def create_entry(conn, project):
     cur.execute(sql, project)
     conn.commit()
     return cur.lastrowid
+
 
 def get_all_entries(conn):
     try:
@@ -48,6 +54,102 @@ def get_all_entries(conn):
     except Exception as e:
         print(f"Error in get_all_entries: {str(e)}")
         return jsonify({"error": "Internal Server Error"}), 500
+
+
+@app.route('/temperature')
+def showTables():
+    # Initialize an empty list to store the extracted data
+    data = []
+    labels = []  # Initialize an empty list for labels
+
+    # Open the file for reading
+    with open('dht_data.txt', 'r') as file:
+        lines = file.readlines()
+        if not lines:
+            print("File is empty.")
+        else:
+            latest_time = datetime.strptime(lines[-1].strip().split(' | ')[1], '%H-%M')
+
+        for line in lines:
+            # Split the line by commas and extract the values
+            values = line.strip().split(', ')
+            if len(values) >= 3:
+                value1 = float(values[0])
+                value2 = float(values[1][:-1])  # Remove the '%' character and convert to float
+                timestamp_str = values[2]
+
+                # Extract the day and time parts of the timestamp and parse them
+                day, time_str = timestamp_str.split(' | ')
+                timestamp = datetime.strptime(time_str, '%H-%M')
+
+                # Calculate the time difference in seconds
+                time_difference = (latest_time - timestamp).total_seconds()
+
+                # Convert time difference to intervals of 5 minutes (300 seconds)
+                time_difference_in_minutes = int(time_difference / 300)
+
+                data.append((value1, value2, time_difference))
+
+                # Format the labels with the day and time in the desired format "Day | Hour : Minute"
+                label = f"{day} | {timestamp.strftime('%H')} : {timestamp.strftime('%M')}"
+                labels.append(label)
+
+    # Now the 'data' list contains the extracted values with time differences, and 'labels' contain formatted labels in the "Day | Hour : Minute" format
+    print(data)
+    print(labels)
+
+    header = "Line Graph"
+    description = "This is the first line graph"
+    return flask.render_template('line_graph_example.html', data=data, labels=labels, header=header)
+
+
+@app.route('/')
+def index():
+    return flask.render_template("index.html")
+
+
+import json
+
+def parse_data_line(line):
+    # Split the line into temperature, humidity, and timestamp using commas and "|"
+    temperature, humidity, timestamp = line.strip().split(', ')
+
+    try:
+        # Convert temperature and humidity to float values
+        temperature = float(temperature)
+        humidity = float(humidity)
+
+        # Create a dictionary for the data
+        data = {
+            'temp': temperature,
+            'humidity': humidity,
+            'timestamp': timestamp
+        }
+
+        # Return the JSON object
+        return json.dumps(data)
+    except ValueError as e:
+        print(f"Warning: Skipping line '{line.strip()}'. Error: {e}")
+        return None
+
+
+
+def read_dht_data(file_path):
+    # Initialize an empty list to store JSON objects
+    data_objects = []
+
+    # Open the file and read each line
+    with open(file_path, 'r') as file:
+        for line in file:
+            # Parse the data and create a JSON object
+            data_object = parse_data_line(line)
+
+            # Append the JSON object to the list
+            data_objects.append(data_object)
+
+    # Return the list of JSON objects
+    return data_objects
+
 
 @app.route('/api/temperature', methods=['POST', 'GET'])
 def addData():
@@ -82,10 +184,12 @@ def addData():
             return jsonify({"error": str(e)}), 500
 
     elif request.method == 'GET':
-        response = flask.jsonify(get_all_entries(create_connection(r"C:\sqlite\db\tempsensor.db")))
+        print("Get request called")
+        # response = flask.jsonify(get_all_entries(create_connection(r"C:\sqlite\db\tempsensor.db")))
+        response = jsonify(read_dht_data("dht_data.txt"))
+        print(response)
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response
-
 
 
 database = r"C:\sqlite\db\tempsensor.db"
@@ -110,5 +214,4 @@ else:
 print("Table Created")
 
 if __name__ == '__main__':
-
     app.run()
