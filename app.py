@@ -9,7 +9,10 @@ import json
 app = Flask(__name__)
 
 
-# TO UTILIZE THIS PROJECT, IN THE TERMINAL TYPE 'flask run --host=0.0.0.0'
+# TO UTILIZE THIS PROJECT FOR SENDING DATA, IN THE TERMINAL TYPE 'flask run --host=0.0.0.0'
+# OTHER WISE RUN PROJECT NORMALLY FOR LOCAL DEVELOPMENT
+# ODDS ARE YOU NEED TO CREATE THE DB FILE IN THE SAME PATH AS YOU'LL FIND BELOW TO ENSURE
+# DATA IS STORED PROPERLY
 def create_connection(db_file):
     conn = None
     try:
@@ -54,6 +57,40 @@ def get_all_entries(conn):
     except Exception as e:
         print(f"Error in get_all_entries: {str(e)}")
         return jsonify({"error": "Internal Server Error"}), 500
+
+def drop_table(conn):
+    cur = conn.cursor()
+    cur.execute('DROP TABLE IF EXISTS data_entry')
+    conn.commit()
+
+def insert_data_from_file(file_path, db_file):
+    conn = create_connection(db_file)
+    drop_table(conn)  # Drop existing data
+    create_table(conn)  # Recreate the table structure
+
+    with open(file_path, 'r') as file:
+        for line in file:
+            temp, humidity, timestamp = map(float, line.strip().split(','))
+            create_entry(conn, (temp, humidity, timestamp))
+
+    conn.close()
+
+def insert_data_from_file_to_db(file_path, db_file):
+    conn = create_connection(db_file)
+    drop_table(conn)  # Drop existing data
+    create_table(conn, sql_create_dataentry_table)  # Recreate the table structure
+
+    with open(file_path, 'r') as file:
+        for line in file:
+            temp, humidity, timestamp = map(str.strip, line.strip().split(','))
+            create_entry(conn, (float(temp), float(humidity), timestamp))
+
+    conn.close()
+@app.route('/api/update')
+def updateTable():
+    insert_data_from_file_to_db('dht_data.txt', database)
+    return "<h1> Successfully Updated the Table </h1>"
+
 
 
 @app.route('/temperature')
@@ -150,6 +187,21 @@ def read_dht_data(file_path):
     # Return the list of JSON objects
     return data_objects
 
+@app.route('/api/user', methods = ['POST'])
+def addUser():
+    if request.method == 'POST':
+        data = request.get_json()
+        print("Data for User Recieved")
+        conn = sqlite3.connect('C:\sqlite\db\\tempsensor.db')
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users (username, password) VALUES (?, ?)",
+                    (data['username'], data['password']))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"message": "Data inserted successfully."}), 201
+
+
 
 @app.route('/api/temperature', methods=['POST', 'GET'])
 def addData():
@@ -185,8 +237,8 @@ def addData():
 
     elif request.method == 'GET':
         print("Get request called")
-        # response = flask.jsonify(get_all_entries(create_connection(r"C:\sqlite\db\tempsensor.db")))
-        response = jsonify(read_dht_data("dht_data.txt"))
+        response = flask.jsonify(get_all_entries(create_connection(r"C:\sqlite\db\tempsensor.db")))
+        #response = jsonify(read_dht_data("dht_data.txt"))
         print(response)
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response
@@ -201,6 +253,11 @@ sql_create_dataentry_table = """ CREATE TABLE IF NOT EXISTS data_entry (
                                                 humidity double,
                                                 timestamp text
                                             ); """
+sql_create_user_table = """CREATE TABLE IF NOT EXISTS users (
+                            id integer PRIMARY KEY,
+                            username text NOT NULL,
+                            password text NOT NULL);
+                            """
 
 conn = create_connection(database)
 create_table(connection, sql_create_dataentry_table)
@@ -209,9 +266,11 @@ create_table(connection, sql_create_dataentry_table)
 if conn is not None:
     # create projects table
     create_table(conn, sql_create_dataentry_table)
+    create_table(conn, sql_create_user_table)
 else:
     print("Error! cannot create the database connection.")
 print("Table Created")
 
 if __name__ == '__main__':
+    app.debug = True
     app.run()
