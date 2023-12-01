@@ -201,7 +201,23 @@ def addUser():
 
         return jsonify({"message": "Data inserted successfully."}), 201
 
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
 
+        # Insert the data into the database
+        conn = sqlite3.connect('C:\sqlite\db\\tempsensor.db')
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username=? and password=?",
+                    (data['username'], data['password']))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"message": "Logged in."}), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/temperature', methods=['POST', 'GET'])
 def addData():
